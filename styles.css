@@ -6,3 +6,37 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+.password-input-container {
+    margin-bottom: 16px;
+}
+
+.password-results-container {
+    padding: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background-color: var(--background-primary);
+    margin-top: 16px;
+}
+
+.strength-weak {
+    color: #e63946;
+    font-weight: bold;
+}
+
+.strength-medium {
+    color: #ffb703;
+    font-weight: bold;
+}
+
+.strength-strong {
+    color: #2a9d8f;
+    font-weight: bold;
+}
+
+.breach-warning {
+    color: #e63946;
+}
+
+.breach-safe {
+    color: #2a9d8f;
+}
