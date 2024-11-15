@@ -1,134 +1,201 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+// src/main.ts
+import { Plugin, WorkspaceLeaf, ItemView, Setting } from "obsidian";
 
-// Remember to rename these classes and interfaces!
+const VIEW_TYPE_PASSWORD_AUDIT = "password-audit-view";
 
-interface MyPluginSettings {
-	mySetting: string;
+export default class PasswordAuditPlugin extends Plugin {
+    async onload() {
+        // Register a new view for the right-side panel
+        this.registerView(
+            VIEW_TYPE_PASSWORD_AUDIT,
+            (leaf) => new PasswordAuditView(leaf)
+        );
+
+        // Add a command to open the Password Audit panel
+        this.addCommand({
+            id: "open-password-audit",
+            name: "Open Password Audit Panel",
+            callback: () => {
+                this.activateView();
+            },
+        });
+
+        // Add a command to generate passwords
+        this.addCommand({
+            id: "generate-password",
+            name: "Generate Password",
+            callback: () => {
+                this.activateView((view) => {
+                    const password = this.generatePassword(16);
+                    view.displayPassword(password);
+                });
+            },
+        });
+
+        console.log("Password Audit Plugin loaded.");
+    }
+
+    async activateView(callback?: (view: PasswordAuditView) => void) {
+        const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PASSWORD_AUDIT);
+        if (leaves.length === 0) {
+            await this.app.workspace.getRightLeaf(false).setViewState({
+                type: VIEW_TYPE_PASSWORD_AUDIT,
+                active: true,
+            });
+        }
+        const view = this.app.workspace
+            .getLeavesOfType(VIEW_TYPE_PASSWORD_AUDIT)[0]
+            ?.view as PasswordAuditView;
+        if (callback && view) callback(view);
+    }
+
+    generatePassword(length: number): string {
+        const chars =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
+        let password = "";
+        for (let i = 0; i < length; i++) {
+            const randomIndex = Math.floor(Math.random() * chars.length);
+            password += chars[randomIndex];
+        }
+        return password;
+    }
+
+    onunload() {
+        this.app.workspace.detachLeavesOfType(VIEW_TYPE_PASSWORD_AUDIT);
+    }
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+class PasswordAuditView extends ItemView {
+    private container: HTMLElement;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+    constructor(leaf: WorkspaceLeaf) {
+        super(leaf);
+    }
 
-	async onload() {
-		await this.loadSettings();
+    getViewType(): string {
+        return VIEW_TYPE_PASSWORD_AUDIT;
+    }
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+    getDisplayText(): string {
+        return "Password Audit";
+    }
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+    async onOpen() {
+        const container = (this.container = this.contentEl);
+        container.empty();
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+        // Inject custom CSS styles
+        this.injectCSS();
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
+        container.createEl("h2", { text: "Password Audit" });
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+        // Input for password analysis
+        const inputDiv = container.createDiv({ cls: "password-input-container" });
+        new Setting(inputDiv)
+            .setName("Analyze a Password")
+            .setDesc("Enter a password to check its strength and breaches.")
+            .addText((text) => {
+                text.setPlaceholder("Enter password...")
+                    .onChange(async (password) => {
+                        const strength = this.analyzeStrength(password);
+                        const breached = await this.checkPasswordBreach(password);
+                        this.displayAnalysis(strength, breached);
+                    });
+            });
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+        // Results container
+        const resultsDiv = container.createDiv({ cls: "password-results-container" });
+        resultsDiv.createEl("p", { text: "Password analysis results will appear here." });
+    }
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
+    async onClose() {
+        this.container?.empty();
+    }
 
-	onunload() {
+    displayAnalysis(strength: string, breached: boolean) {
+        const resultsDiv = this.container?.querySelector(".password-results-container");
+        if (!resultsDiv) return; // Exit if resultsDiv is null
 
-	}
+        resultsDiv.empty();
+        resultsDiv.createEl("p", {
+            text: `Strength: ${strength}`,
+            cls: `strength-${strength.toLowerCase().split(" ")[0]}`,
+        });
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
+        resultsDiv.createEl("p", {
+            text: breached
+                ? "⚠️ This password has been breached!"
+                : "✅ This password is safe from breaches.",
+            cls: breached ? "breach-warning" : "breach-safe",
+        });
+    }
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
+    displayPassword(password: string) {
+        const resultsDiv = this.container?.querySelector(".password-results-container");
+        if (!resultsDiv) return; // Exit if resultsDiv is null
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+        resultsDiv.empty();
+        resultsDiv.createEl("p", { text: `Generated Password: ${password}` });
+    }
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+    analyzeStrength(password: string): string {
+        if (password.length < 8) return "Weak (too short)";
+        if (!/[A-Z]/.test(password)) return "Weak (no uppercase letters)";
+        if (!/[a-z]/.test(password)) return "Weak (no lowercase letters)";
+        if (!/\d/.test(password)) return "Weak (no numbers)";
+        if (!/[!@#$%^&*()]/.test(password)) return "Medium (no special characters)";
+        return "Strong";
+    }
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
+    async checkPasswordBreach(password: string): Promise<boolean> {
+        const hash = await this.hashPassword(password);
+        const prefix = hash.substring(0, 5);
+        const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
+        const text = await response.text();
+        const breaches = text.split("\n");
+        return breaches.some((line) => line.startsWith(hash.substring(5).toUpperCase()));
+    }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+    async hashPassword(password: string): Promise<string> {
+        const msgUint8 = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest("SHA-1", msgUint8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
 
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    // Inject CSS for styling
+    injectCSS() {
+        const style = document.createElement("style");
+        style.innerText = `
+        .password-input-container {
+            margin-bottom: 16px;
+        }
+        .password-results-container {
+            padding: 8px;
+            border: 1px solid var(--background-modifier-border);
+            border-radius: 4px;
+            background-color: var(--background-primary);
+            margin-top: 16px;
+        }
+        .strength-weak {
+            color: #e63946;
+            font-weight: bold;
+        }
+        .strength-medium {
+            color: #ffb703;
+            font-weight: bold;
+        }
+        .strength-strong {
+            color: #2a9d8f;
+            font-weight: bold;
+        }
+        .breach-warning {
+            color: #e63946;
+        }
+        .breach-safe {
+            color: #2a9d8f;
+        }
+        `;
+        document.head.appendChild(style);
+    }
 }

@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
+	"id": "password-audit-plugin",
+	"name": "Password Audit Plugin",
+	"version": "2.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"author": "Prashanth PUlisetti",
+	"description": "A minimalist password strength analyzer and breach checker for Obsidian.",
 	"isDesktopOnly": false
-}
+  }
+  
